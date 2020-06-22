@@ -45,11 +45,6 @@ genListish open close lst =
 genListish' :: forall a. String -> String -> (a -> Gen String) -> List a -> Gen String
 genListish' open close g lst = (sequence $ (map g lst)) >>= (genListish open close)
 
-genOperationDefinition :: AST.OperationDefinition -> Gen String
-genOperationDefinition (AST.OperationDefinition_SelectionSet x) = genSelectionSet x
-
-genOperationDefinition (AST.OperationDefinition_OperationType x) = genT_OperationDefinition_OperationType x
-
 genShowable :: forall n a. Newtype n a => Show a => n -> Gen String
 genShowable = pure <<< show <<< unwrap
 
@@ -162,3 +157,14 @@ genT_OperationDefinition_OperationType o =
     , mpg genDirectives o.directives
     , genSelectionSet o.selectionSet
     ]
+
+--------------------------------------------
+--------------------------------------------
+--------------------------------------------
+--- the main entry point -------------------
+--------------------------------------------
+--------------------------------------------
+genOperationDefinition :: AST.OperationDefinition -> Gen String
+genOperationDefinition (AST.OperationDefinition_SelectionSet x) = genSelectionSet x
+
+genOperationDefinition (AST.OperationDefinition_OperationType x) = genT_OperationDefinition_OperationType x
