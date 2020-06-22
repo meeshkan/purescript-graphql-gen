@@ -1,6 +1,7 @@
 module Data.GraphQL.Gen where
 
 import Prelude
+import Data.Array (fromFoldable)
 import Data.Foldable (class Foldable, fold, intercalate)
 import Data.GraphQL.AST as AST
 import Data.GraphQL.Parser as GP
@@ -10,10 +11,10 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.NonEmpty (NonEmpty(..))
 import Data.String.CodeUnits (fromCharArray)
 import Data.Traversable (class Traversable, sequence)
-import Test.QuickCheck.Gen (Gen, oneOf, elements, arrayOf)
+import Test.QuickCheck.Gen (Gen, arrayOf, arrayOf1, elements, oneOf)
 
 whitespace ∷ Gen String
-whitespace = (arrayOf $ pure ' ') >>= pure <<< fromCharArray
+whitespace = (arrayOf1 $ pure ' ') >>= pure <<< fromCharArray <<< fromFoldable
 
 strNoNewline ∷ Gen String
 strNoNewline =
@@ -24,7 +25,7 @@ strNoNewline =
     <<< fromCharArray
 
 comment ∷ Gen String
-comment = (<>) <$> pure "#" <*> strNoNewline
+comment = spf [ pure "#", strNoNewline, pure "\n" ]
 
 comma ∷ Gen String
 comma = pure ","
