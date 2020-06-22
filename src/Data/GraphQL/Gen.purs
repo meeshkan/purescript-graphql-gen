@@ -16,7 +16,12 @@ whitespace ∷ Gen String
 whitespace = (arrayOf $ pure ' ') >>= pure <<< fromCharArray
 
 strNoNewline ∷ Gen String
-strNoNewline = (arrayOf $ elements (NonEmpty '_' (GP.lower <> GP.upper <> GP.digits))) >>= pure <<< fromCharArray
+strNoNewline =
+  ( arrayOf
+      $ elements (NonEmpty '_' (GP.lower <> GP.upper <> GP.digits))
+  )
+    >>= pure
+    <<< fromCharArray
 
 comment ∷ Gen String
 comment = (<>) <$> pure "#" <*> strNoNewline
@@ -34,13 +39,21 @@ mandatoryIgnorable :: Gen String
 mandatoryIgnorable = oneOf $ NonEmpty whitespace [ comment, comma, lineTerminator ]
 
 _genListish :: List String -> Gen (List String)
-_genListish = sequence <<< intercalate (singleton mandatoryIgnorable) <<< map (singleton <<< pure)
+_genListish =
+  sequence
+    <<< intercalate (singleton mandatoryIgnorable)
+    <<< map (singleton <<< pure)
 
 genListish :: String -> String -> List String -> Gen String
 genListish open close lst =
   (_genListish lst)
     >>= \l ->
-        (sequence $ ((pure open : ignorable : (map pure l)) <> (ignorable : pure close : Nil))) >>= pure <<< fold
+        ( sequence
+            $ ( (pure open : ignorable : (map pure l)) <> (ignorable : pure close : Nil)
+              )
+        )
+          >>= pure
+          <<< fold
 
 genListish' :: forall a. String -> String -> (a -> Gen String) -> List a -> Gen String
 genListish' open close g lst = (sequence $ (map g lst)) >>= (genListish open close)
@@ -80,10 +93,16 @@ mpg :: forall a. (a -> Gen String) -> Maybe a -> Gen String
 mpg = maybe (pure "")
 
 genArgument :: AST.Argument -> Gen String
-genArgument (AST.Argument a) = spf [ pure a.name, ignorable, pure ":", ignorable, genValue a.value ]
+genArgument (AST.Argument a) =
+  spf
+    [ pure a.name, ignorable, pure ":", ignorable, genValue a.value
+    ]
 
 genDirective :: AST.Directive -> Gen String
-genDirective (AST.Directive d) = spf [ pure "@", pure d.name, ignorable, mpg genArguments d.arguments ]
+genDirective (AST.Directive d) =
+  spf
+    [ pure "@", pure d.name, ignorable, mpg genArguments d.arguments
+    ]
 
 -- directives are not bounded by any bracketing, thus the empty strings
 genDirectives :: AST.Directives -> Gen String
@@ -98,13 +117,21 @@ genAlias s = spf [ pure s, ignorable, pure ":" ]
 genField :: AST.Field -> Gen String
 genField (AST.Field s) =
   spf
-    [ mpg genAlias s.alias, pure s.name, mpg genArguments s.arguments, mpg genDirectives s.directives, mpg genSelectionSet s.selectionSet
+    [ mpg genAlias s.alias
+    , pure s.name
+    , mpg genArguments s.arguments
+    , mpg genDirectives s.directives
+    , mpg genSelectionSet s.selectionSet
     ]
 
 genFragmentSpread :: AST.FragmentSpread -> Gen String
 genFragmentSpread (AST.FragmentSpread fs) =
   spf
-    [ pure "...", ignorable, pure fs.fragmentName, ignorable, mpg genDirectives fs.directives
+    [ pure "..."
+    , ignorable
+    , pure fs.fragmentName
+    , ignorable
+    , mpg genDirectives fs.directives
     ]
 
 genTypeCondition :: AST.TypeCondition -> Gen String
@@ -113,7 +140,9 @@ genTypeCondition (AST.TypeCondition (AST.NamedType t)) = pure t
 genInlineFragment :: AST.InlineFragment -> Gen String
 genInlineFragment (AST.InlineFragment f) =
   spf
-    [ mpg genTypeCondition f.typeCondition, mpg genDirectives f.directives, genSelectionSet f.selectionSet
+    [ mpg genTypeCondition f.typeCondition
+    , mpg genDirectives f.directives
+    , genSelectionSet f.selectionSet
     ]
 
 genSelection :: AST.Selection -> Gen String
@@ -131,20 +160,35 @@ genType (AST.Type_NamedType (AST.NamedType nt)) = pure nt
 
 genType (AST.Type_ListType (AST.ListType lt)) = genListish' "[" "]" genType lt
 
-genType (AST.Type_NonNullType (AST.NonNullType_ListType l)) = genType (AST.Type_ListType l) >>= pure <<< (flip append "!")
+genType (AST.Type_NonNullType (AST.NonNullType_ListType l)) =
+  genType (AST.Type_ListType l)
+    >>= pure
+    <<< (flip append "!")
 
-genType (AST.Type_NonNullType (AST.NonNullType_NamedType n)) = genType (AST.Type_NamedType n) >>= pure <<< (flip append "!")
+genType (AST.Type_NonNullType (AST.NonNullType_NamedType n)) =
+  genType (AST.Type_NamedType n)
+    >>= pure
+    <<< (flip append "!")
 
 genDefaultValue :: AST.DefaultValue -> Gen String
 genDefaultValue (AST.DefaultValue dv) = spf [ pure "=", ignorable, genValue dv ]
 
 genVariableDefinition :: AST.VariableDefinition -> Gen String
-genVariableDefinition (AST.VariableDefinition vd) = spf [ genShowable vd.variable, genType vd.type, mpg genDefaultValue vd.defaultValue ]
+genVariableDefinition (AST.VariableDefinition vd) =
+  spf
+    [ genShowable vd.variable, genType vd.type, mpg genDefaultValue vd.defaultValue
+    ]
 
 genVariableDefinitions :: AST.VariableDefinitions -> Gen String
-genVariableDefinitions (AST.VariableDefinitions vd) = genListish' "(" ")" genVariableDefinition vd
+genVariableDefinitions (AST.VariableDefinitions vd) =
+  genListish'
+    "("
+    ")"
+    genVariableDefinition
+    vd
 
-genT_OperationDefinition_OperationType :: AST.T_OperationDefinition_OperationType -> Gen String
+genT_OperationDefinition_OperationType ::
+  AST.T_OperationDefinition_OperationType -> Gen String
 genT_OperationDefinition_OperationType o =
   spf
     [ pure
@@ -167,4 +211,6 @@ genT_OperationDefinition_OperationType o =
 genOperationDefinition :: AST.OperationDefinition -> Gen String
 genOperationDefinition (AST.OperationDefinition_SelectionSet x) = genSelectionSet x
 
-genOperationDefinition (AST.OperationDefinition_OperationType x) = genT_OperationDefinition_OperationType x
+genOperationDefinition (AST.OperationDefinition_OperationType x) =
+  genT_OperationDefinition_OperationType
+    x
