@@ -5,7 +5,7 @@ import Data.Foldable (class Foldable, fold, intercalate)
 import Data.GraphQL.AST as AST
 import Data.GraphQL.Parser as GP
 import Data.List (List(..), (:), singleton)
-import Data.Maybe (maybe)
+import Data.Maybe (Maybe, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.NonEmpty (NonEmpty(..))
 import Data.String.CodeUnits (fromCharArray)
@@ -81,35 +81,84 @@ genValue (AST.Value_Variable b) = genShowable b
 spf :: forall t. Traversable t => Foldable t => t (Gen String) -> Gen String
 spf s = (sequence s) >>= pure <<< fold
 
+mpg :: forall a. (a -> Gen String) -> Maybe a -> Gen String
+mpg = maybe (pure "")
+
 genArgument :: AST.Argument -> Gen String
 genArgument (AST.Argument a) = spf [ pure a.name, ignorable, pure ":", ignorable, genValue a.value ]
 
 genDirective :: AST.Directive -> Gen String
-genDirective (AST.Directive d) = spf [ pure "@", pure d.name, ignorable, maybe (pure "") genArguments d.arguments ]
+genDirective (AST.Directive d) = spf [ pure "@", pure d.name, ignorable, mpg genArguments d.arguments ]
 
 -- directives are not bounded by any bracketing, thus the empty strings
 genDirectives :: AST.Directives -> Gen String
 genDirectives (AST.Directives d) = genListish' "" "" genDirective d
 
---  = { alias ∷ (Maybe String), name ∷ String, arguments ∷ (Maybe Arguments), directives ∷ (Maybe Directives), selectionSet ∷ (Maybe SelectionSet) }
 genArguments :: AST.Arguments -> Gen String
 genArguments (AST.Arguments l) = genListish' "(" ")" genArgument l
 
 genAlias :: String -> Gen String
-genAlias s = (sequence [ pure s, ignorable, pure ":" ]) >>= pure <<< fold
+genAlias s = spf [ pure s, ignorable, pure ":" ]
 
 genField :: AST.Field -> Gen String
-genField (AST.Field s) = pure "" -- replace me
+genField (AST.Field s) =
+  spf
+    [ mpg genAlias s.alias, pure s.name, mpg genArguments s.arguments, mpg genDirectives s.directives, mpg genSelectionSet s.selectionSet
+    ]
+
+genFragmentSpread :: AST.FragmentSpread -> Gen String
+genFragmentSpread (AST.FragmentSpread fs) =
+  spf
+    [ pure "...", ignorable, pure fs.fragmentName, ignorable, mpg genDirectives fs.directives
+    ]
+
+genTypeCondition :: AST.TypeCondition -> Gen String
+genTypeCondition (AST.TypeCondition (AST.NamedType t)) = pure t
+
+genInlineFragment :: AST.InlineFragment -> Gen String
+genInlineFragment (AST.InlineFragment f) =
+  spf
+    [ mpg genTypeCondition f.typeCondition, mpg genDirectives f.directives, genSelectionSet f.selectionSet
+    ]
 
 genSelection :: AST.Selection -> Gen String
-genSelection (AST.Selection_Field s) = genField s -- replace me
+genSelection (AST.Selection_Field s) = genField s
 
-genSelection (AST.Selection_FragmentSpread s) = pure "" -- replace me
+genSelection (AST.Selection_FragmentSpread s) = genFragmentSpread s
 
-genSelection (AST.Selection_InlineFragment s) = pure "" -- replace me
+genSelection (AST.Selection_InlineFragment s) = genInlineFragment s
 
 genSelectionSet :: AST.SelectionSet -> Gen String
 genSelectionSet (AST.SelectionSet s) = genListish' "{" "}" genSelection s
 
+genType :: AST.Type -> Gen String
+genType (AST.Type_NamedType (AST.NamedType nt)) = pure nt
+
+genType (AST.Type_ListType (AST.ListType lt)) = genListish' "[" "]" genType lt
+
+genType (AST.Type_NonNullType (AST.NonNullType_ListType l)) = genType (AST.Type_ListType l) >>= pure <<< (flip append "!")
+
+genType (AST.Type_NonNullType (AST.NonNullType_NamedType n)) = genType (AST.Type_NamedType n) >>= pure <<< (flip append "!")
+
+genDefaultValue :: AST.DefaultValue -> Gen String
+genDefaultValue (AST.DefaultValue dv) = spf [ pure "=", ignorable, genValue dv ]
+
+genVariableDefinition :: AST.VariableDefinition -> Gen String
+genVariableDefinition (AST.VariableDefinition vd) = spf [ genShowable vd.variable, genType vd.type, mpg genDefaultValue vd.defaultValue ]
+
+genVariableDefinitions :: AST.VariableDefinitions -> Gen String
+genVariableDefinitions (AST.VariableDefinitions vd) = genListish' "(" ")" genVariableDefinition vd
+
 genT_OperationDefinition_OperationType :: AST.T_OperationDefinition_OperationType -> Gen String
-genT_OperationDefinition_OperationType _ = pure "" -- replace me
+genT_OperationDefinition_OperationType o =
+  spf
+    [ pure
+        $ case o.operationType of
+            AST.Query -> "query"
+            AST.Mutation -> "mutation"
+            AST.Subscription -> "subscription"
+    , mpg pure o.name
+    , mpg genVariableDefinitions o.variableDefinitions
+    , mpg genDirectives o.directives
+    , genSelectionSet o.selectionSet
+    ]
