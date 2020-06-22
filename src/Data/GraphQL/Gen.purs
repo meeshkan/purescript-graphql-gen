@@ -30,7 +30,7 @@ ignorable :: Gen String
 ignorable = oneOf $ NonEmpty whitespace [comment, comma, lineTerminator]
 
 _genListish :: List String -> Gen (List String)
-_genListish lst = sequence $ map ((<*>) ((<>) <$> ignorable) <<< pure) lst
+_genListish lst = sequence $ map (apply (append <$> ignorable) <<< pure) lst
 
 genListish :: String -> String -> List String -> Gen String
 genListish open close lst = (_genListish lst) >>= \l -> 
