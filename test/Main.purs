@@ -10,11 +10,12 @@ import Data.GraphQL.Parser as GP
 import Data.List (fromFoldable, List)
 import Data.Maybe (Maybe(..))
 import Data.NonEmpty (NonEmpty(..))
+import Data.String (Replacement(..), replace, Pattern(..))
 import Data.String.CodeUnits (fromCharArray)
 import Data.Traversable (sequence)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Test.QuickCheck (Result(..), arbitrary, quickCheck)
+import Test.QuickCheck (Result(..), arbitrary, quickCheck')
 import Test.QuickCheck.Gen (Gen, arrayOf, frequency, oneOf)
 import Text.Parsing.Parser (runParser)
 
@@ -34,13 +35,13 @@ genName ∷ Gen String
 genName = ((<>) <$> (sequence [ (elements $ NonEmpty '_' (GP.lower <> GP.upper)) ]) <*> (arrayOf (elements $ NonEmpty '_' (GP.lower <> GP.upper <> GP.digits)))) >>= pure <<< fromCharArray
 
 genVariable :: Gen AST.Variable
-genVariable = AST.Variable <$> (genName >>= pure <<< append "$")
+genVariable = AST.Variable <$> genName
 
 genNamedType :: Gen AST.NamedType
 genNamedType = AST.NamedType <$> genName
 
 genListType :: Gen AST.Type -> Gen AST.ListType
-genListType v = AST.ListType <$> listOf v
+genListType v = AST.ListType <$> v
 
 genNonNullType :: Gen AST.Type -> Gen AST.NonNullType
 genNonNullType v = oneOf $ NonEmpty (AST.NonNullType_NamedType <$> genNamedType) [ AST.NonNullType_ListType <$> genListType v ]
@@ -55,7 +56,7 @@ genType_NonNullType :: Gen AST.Type -> Gen AST.Type
 genType_NonNullType p = AST.Type_NonNullType <$> genNonNullType p
 
 genType :: Gen AST.Type
-genType = fix \p -> oneOf $ NonEmpty genType_NamedType [ genType_ListType p, genType_NonNullType p ]
+genType = fix \p -> resize (\x -> max 0 $ x - 2) $ oneOf (NonEmpty genType_NamedType [ genType_ListType p, genType_NonNullType p ])
 
 genValue_Variable :: Gen AST.Value
 genValue_Variable = AST.Value_Variable <$> genVariable
@@ -67,7 +68,7 @@ genValue_FloatValue :: Gen AST.Value
 genValue_FloatValue = AST.Value_FloatValue <$> (AST.FloatValue <$> arbitrary)
 
 genValue_StringValue :: Gen AST.Value
-genValue_StringValue = AST.Value_StringValue <$> (AST.StringValue <$> arbitrary)
+genValue_StringValue = AST.Value_StringValue <$> (AST.StringValue <$> genName) -- should open up to more possible strings
 
 genValue_BooleanValue :: Gen AST.Value
 genValue_BooleanValue = AST.Value_BooleanValue <$> (AST.BooleanValue <$> arbitrary)
@@ -87,17 +88,19 @@ genValue_ObjectValue v = AST.Value_ObjectValue <$> (AST.ObjectValue <$> listOf (
 genValue :: Gen AST.Value
 genValue =
   fix \p ->
-    oneOf
-      $ NonEmpty genValue_Variable
-          [ genValue_IntValue
-          , genValue_FloatValue
-          , genValue_StringValue
-          , genValue_BooleanValue
-          , genValue_NullValue
-          , genValue_EnumValue
-          , genValue_ListValue p
-          , genValue_ObjectValue p
-          ]
+    resize (\x -> max 0 $ x - 2)
+      $ oneOf
+          ( NonEmpty genValue_Variable
+              [ genValue_IntValue
+              , genValue_FloatValue
+              , genValue_StringValue
+              , genValue_BooleanValue
+              , genValue_NullValue
+              , genValue_EnumValue
+              , genValue_ListValue p
+              , genValue_ObjectValue p
+              ]
+          )
 
 genDefaultValue :: Gen AST.DefaultValue
 genDefaultValue = AST.DefaultValue <$> genValue
@@ -155,7 +158,7 @@ genTypeCondition :: Gen AST.TypeCondition
 genTypeCondition = AST.TypeCondition <$> (AST.NamedType <$> genName)
 
 genSelectionSet :: Gen AST.SelectionSet
-genSelectionSet = fix \p -> AST.SelectionSet <$> listOf (genSelection p)
+genSelectionSet = fix \p -> resize (\x -> max 0 $ x - 2) $ AST.SelectionSet <$> listOf (genSelection p)
 
 genInlineFragment :: Gen AST.SelectionSet -> Gen AST.InlineFragment
 genInlineFragment ss =
@@ -187,7 +190,7 @@ genOperationDefinition = oneOf $ NonEmpty genOperationDefinition_SelectionSet [ 
 
 testOperationDefinition :: Gen Result
 testOperationDefinition = do
-  od0 <- resize (\_ -> 1) genOperationDefinition
+  od0 <- genOperationDefinition
   -- because of the way parsing works, some information is lost in parsing
   -- for example, Just (Nil) will turn into Nothing after something is parsed and unparsed
   -- there is no way to preserve this distinction
@@ -198,4 +201,4 @@ testOperationDefinition = do
 
 main :: Effect Unit
 main = do
-  quickCheck testOperationDefinition
+  quickCheck' 100 testOperationDefinition

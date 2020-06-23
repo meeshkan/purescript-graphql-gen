@@ -11,7 +11,7 @@ import Data.Newtype (class Newtype, unwrap)
 import Data.NonEmpty (NonEmpty(..))
 import Data.String.CodeUnits (fromCharArray)
 import Data.Traversable (class Traversable, sequence)
-import Test.QuickCheck.Gen (Gen, arrayOf, arrayOf1, elements, oneOf)
+import Test.QuickCheck.Gen (Gen, arrayOf, arrayOf1, elements)
 
 whitespace ∷ Gen String
 whitespace = (arrayOf1 $ pure ' ') >>= pure <<< fromCharArray <<< fromFoldable
@@ -33,11 +33,11 @@ comma = pure ","
 lineTerminator ∷ Gen String
 lineTerminator = pure "\n"
 
-ignorable :: Gen String
-ignorable = oneOf $ NonEmpty whitespace [ pure "", comment, comma, lineTerminator ]
-
 mandatoryIgnorable :: Gen String
-mandatoryIgnorable = oneOf $ NonEmpty whitespace [ comment, comma, lineTerminator ]
+mandatoryIgnorable = pure " " -- oneOf $ NonEmpty whitespace [ comment, comma, lineTerminator ]
+
+ignorable :: Gen String
+ignorable = pure " " -- oneOf $ NonEmpty whitespace [ pure "", comment, comma, lineTerminator ]
 
 _genListish :: List String -> Gen (List String)
 _genListish =
@@ -71,7 +71,7 @@ genObjectValue (AST.ObjectValue l) = genListish' "{" "}" genArgument l
 genValue :: AST.Value -> Gen String
 genValue (AST.Value_BooleanValue b) = genShowable b
 
-genValue (AST.Value_EnumValue b) = genShowable b
+genValue (AST.Value_EnumValue b) = genEnum b
 
 genValue (AST.Value_FloatValue b) = genShowable b
 
@@ -85,7 +85,13 @@ genValue (AST.Value_ObjectValue b) = genObjectValue b
 
 genValue (AST.Value_StringValue b) = genShowable b
 
-genValue (AST.Value_Variable b) = genShowable b
+genValue (AST.Value_Variable b) = genVariable b
+
+genVariable :: AST.Variable -> Gen String
+genVariable (AST.Variable b) = pure ("$" <> b)
+
+genEnum :: AST.EnumValue -> Gen String
+genEnum (AST.EnumValue b) = pure b
 
 spf :: forall t. Traversable t => Foldable t => t (Gen String) -> Gen String
 spf s = (sequence s) >>= pure <<< fold
@@ -119,9 +125,13 @@ genField :: AST.Field -> Gen String
 genField (AST.Field s) =
   spf
     [ mpg genAlias s.alias
+    , ignorable
     , pure s.name
+    , ignorable
     , mpg genArguments s.arguments
+    , ignorable
     , mpg genDirectives s.directives
+    , ignorable
     , mpg genSelectionSet s.selectionSet
     ]
 
@@ -136,13 +146,17 @@ genFragmentSpread (AST.FragmentSpread fs) =
     ]
 
 genTypeCondition :: AST.TypeCondition -> Gen String
-genTypeCondition (AST.TypeCondition (AST.NamedType t)) = pure t
+genTypeCondition (AST.TypeCondition (AST.NamedType t)) = spf [ pure "on", mandatoryIgnorable, pure t ]
 
 genInlineFragment :: AST.InlineFragment -> Gen String
 genInlineFragment (AST.InlineFragment f) =
   spf
-    [ mpg genTypeCondition f.typeCondition
+    [ pure "..."
+    , ignorable
+    , mpg genTypeCondition f.typeCondition
+    , ignorable
     , mpg genDirectives f.directives
+    , ignorable
     , genSelectionSet f.selectionSet
     ]
 
@@ -159,7 +173,7 @@ genSelectionSet (AST.SelectionSet s) = genListish' "{" "}" genSelection s
 genType :: AST.Type -> Gen String
 genType (AST.Type_NamedType (AST.NamedType nt)) = pure nt
 
-genType (AST.Type_ListType (AST.ListType lt)) = genListish' "[" "]" genType lt
+genType (AST.Type_ListType (AST.ListType lt)) = spf [ pure "[", genType lt, pure "]" ]
 
 genType (AST.Type_NonNullType (AST.NonNullType_ListType l)) =
   genType (AST.Type_ListType l)
@@ -177,7 +191,13 @@ genDefaultValue (AST.DefaultValue dv) = spf [ pure "=", ignorable, genValue dv ]
 genVariableDefinition :: AST.VariableDefinition -> Gen String
 genVariableDefinition (AST.VariableDefinition vd) =
   spf
-    [ genShowable vd.variable, genType vd.type, mpg genDefaultValue vd.defaultValue
+    [ genVariable vd.variable
+    , ignorable
+    , pure ":"
+    , ignorable
+    , genType vd.type
+    , ignorable
+    , mpg genDefaultValue vd.defaultValue
     ]
 
 genVariableDefinitions :: AST.VariableDefinitions -> Gen String
@@ -197,9 +217,13 @@ genT_OperationDefinition_OperationType o =
             AST.Query -> "query"
             AST.Mutation -> "mutation"
             AST.Subscription -> "subscription"
+    , ignorable
     , mpg pure o.name
+    , ignorable
     , mpg genVariableDefinitions o.variableDefinitions
+    , ignorable
     , mpg genDirectives o.directives
+    , ignorable
     , genSelectionSet o.selectionSet
     ]
 
