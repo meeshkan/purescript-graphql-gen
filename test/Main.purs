@@ -2,7 +2,7 @@ module Test.Main where
 
 import Prelude
 import Control.Lazy (fix)
-import Control.Monad.Gen (elements, resize, suchThat)
+import Control.Monad.Gen (resize)
 import Data.Either (either)
 import Data.GraphQL.AST as AST
 import Data.GraphQL.Gen as GG
@@ -16,7 +16,7 @@ import Data.Traversable (sequence)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Test.QuickCheck (Result(..), arbitrary, quickCheck')
-import Test.QuickCheck.Gen (Gen, arrayOf, frequency, oneOf)
+import Test.QuickCheck.Gen (Gen, arrayOf, frequency, oneOf, elements, suchThat)
 import Text.Parsing.Parser (runParser)
 
 listOf :: forall a. Gen a -> Gen (List a)
