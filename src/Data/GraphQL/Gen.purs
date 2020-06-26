@@ -5,7 +5,7 @@ import Data.Array (fromFoldable)
 import Data.Foldable (class Foldable, fold, intercalate)
 import Data.GraphQL.AST as AST
 import Data.GraphQL.Parser as GP
-import Data.List (List(..), (:), singleton)
+import Data.List (List(..), (:), singleton, length)
 import Data.Maybe (Maybe, maybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.NonEmpty (NonEmpty(..))
@@ -116,7 +116,7 @@ genDirectives :: AST.Directives -> Gen String
 genDirectives (AST.Directives d) = genListish' "" "" genDirective d
 
 genArguments :: AST.Arguments -> Gen String
-genArguments (AST.Arguments l) = genListish' "(" ")" genArgument l
+genArguments (AST.Arguments l) = if length l == 0 then pure "" else genListish' "(" ")" genArgument l
 
 genAlias :: String -> Gen String
 genAlias s = spf [ pure s, ignorable, pure ":" ]

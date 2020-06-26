@@ -10,7 +10,6 @@ import Data.GraphQL.Parser as GP
 import Data.List (fromFoldable, List)
 import Data.Maybe (Maybe(..))
 import Data.NonEmpty (NonEmpty(..))
-import Data.String (Replacement(..), replace, Pattern(..))
 import Data.String.CodeUnits (fromCharArray)
 import Data.Traversable (sequence)
 import Data.Tuple (Tuple(..))
